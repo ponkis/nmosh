@@ -390,7 +390,10 @@ impl Overlay {
             ui.selectable_value(&mut settings.aspect_mode, AspectMode::Source, "Source");
             ui.selectable_value(&mut settings.aspect_mode, AspectMode::FourThree, "4:3");
         });
-        ui.add(egui::Slider::new(&mut settings.zoom, 0.25..=4.0).text("Zoom"));
+        ui.horizontal(|ui| {
+            ui.label("Zoom");
+            ui.add(egui::DragValue::new(&mut settings.zoom).speed(0.05));
+        });
         ui.checkbox(&mut settings.input_flip_x, "Flip video horizontally");
         ui.checkbox(&mut settings.input_flip_y, "Flip video vertically");
     }
@@ -427,9 +430,8 @@ impl Overlay {
     ) {
         ui.heading("Effects");
         ui.add(egui::Slider::new(&mut settings.cube_amount, 0.0..=1.0).text("Cube morph"));
-        ui.add(
-            egui::Slider::new(&mut settings.oscilloscope_amount, 0.0..=1.0).text("Oscilloscope"),
-        );
+        ui.checkbox(&mut settings.inside_box, "Inside box");
+        ui.add(egui::Slider::new(&mut settings.tunnel_amount, 0.0..=1.0).text("Tunnel"));
         ui.add(egui::Slider::new(&mut settings.posterize_amount, 0.0..=1.0).text("Posterize"));
         ui.add(egui::Slider::new(&mut settings.thermal_amount, 0.0..=1.0).text("Thermal color"));
         if ui.button("Reset effects now").clicked() {
@@ -539,7 +541,8 @@ impl Overlay {
         }
 
         match target {
-            LearnTarget::Control(_) if event.source != MidiSource::ControlChange => {}
+            LearnTarget::Control(control)
+                if event.source != MidiSource::ControlChange && control != MidiControl::Flash => {}
             _ => {
                 assign_unique_binding(settings, target, event.as_binding());
                 self.learn_target = None;

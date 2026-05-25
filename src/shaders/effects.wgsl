@@ -10,6 +10,7 @@ struct Uniforms {
     view_params: vec4<f32>,
     chroma_key: vec4<f32>,
     chroma_params: vec4<f32>,
+    effect_params: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -45,7 +46,7 @@ fn safe_uv(uv: vec2<f32>) -> vec2<f32> {
 }
 
 fn oriented_uv(uv_in: vec2<f32>) -> vec2<f32> {
-    var uv = uv_in;
+    var uv = vec2<f32>(uv_in.x, 1.0 - uv_in.y);
     if (u.app_params.y > 0.5) {
         uv.x = 1.0 - uv.x;
     }
@@ -106,17 +107,6 @@ fn thermal_color(lum: f32) -> vec3<f32> {
     return mix(a, b, smoothstep(0.35, 0.75, lum));
 }
 
-fn scope_trace(uv: vec2<f32>, sample_y: f32, center_y: f32, amplitude: f32, thickness: f32) -> f32 {
-    let sample = textureSample(source_tex, source_sampler, safe_uv(oriented_uv(vec2<f32>(uv.x, sample_y)))).rgb;
-    let lum = dot(sample, vec3<f32>(0.299, 0.587, 0.114));
-    let edge_sample = textureSample(source_tex, source_sampler, safe_uv(oriented_uv(vec2<f32>(fract(uv.x + 0.002), sample_y)))).rgb;
-    let edge = length(edge_sample - sample);
-    let wave_y = center_y + (0.5 - lum) * amplitude + sin(uv.x * 44.0 + u.time_params.x * 1.7) * edge * 0.045;
-    let core = 1.0 - smoothstep(0.0, thickness, abs(uv.y - wave_y));
-    let glow = 1.0 - smoothstep(0.0, thickness * 5.5, abs(uv.y - wave_y));
-    return core + glow * 0.32;
-}
-
 fn aspect_fit_scale() -> vec2<f32> {
     let window_aspect = max(u.resolution.x / max(u.resolution.y, 1.0), 0.1);
     let video_aspect = max(u.resolution.z / max(u.resolution.w, 1.0), 0.1);
@@ -129,18 +119,70 @@ fn aspect_fit_scale() -> vec2<f32> {
 }
 
 fn kaleidoscope(uv: vec2<f32>, amount: f32) -> vec2<f32> {
-    if (amount < 0.01) {
+    let blend = smoothstep(0.0, 0.75, amount);
+    if (blend < 0.0001) {
         return uv;
     }
 
     let pi = 3.14159265359;
-    let segments = mix(2.0, 12.0, amount);
+    let segments = mix(3.0, 14.0, smoothstep(0.15, 1.0, amount));
     let centered = uv - vec2<f32>(0.5);
     let radius = length(centered);
     var angle = atan2(centered.y, centered.x);
     let sector = 2.0 * pi / segments;
     angle = abs((angle - floor(angle / sector) * sector) - sector * 0.5);
-    return vec2<f32>(0.5) + vec2<f32>(cos(angle), sin(angle)) * radius;
+    let kalei_uv = vec2<f32>(0.5) + vec2<f32>(cos(angle), sin(angle)) * radius;
+    return mix(uv, kalei_uv, blend);
+}
+
+fn tunnel(uv: vec2<f32>, amount: f32) -> vec2<f32> {
+    let blend = smoothstep(0.0, 0.85, amount);
+    if (blend < 0.0001) {
+        return uv;
+    }
+
+    let pi = 3.14159265359;
+    let centered = uv - vec2<f32>(0.5);
+    let radius = max(length(centered), 0.002);
+    var angle = atan2(centered.y, centered.x) / (2.0 * pi);
+    angle = abs(fract(angle * mix(4.0, 12.0, amount)) - 0.5) * 2.0;
+
+    let flow = u.time_params.x * mix(0.18, 1.15, amount);
+    let rings = fract((0.22 / radius) + flow);
+    let twist = sin(log(radius + 0.015) * 8.0 - flow * 10.0) * 0.08 * amount;
+    let tunnel_uv = vec2<f32>(
+        fract(angle + twist),
+        rings
+    );
+
+    return mix(uv, tunnel_uv, blend);
+}
+
+fn room_projection(screen_uv: vec2<f32>) -> vec2<f32> {
+    let aspect = max(u.resolution.x / max(u.resolution.y, 1.0), 0.2);
+    let yaw = (u.controls2.y - 0.5) * 0.9 + u.midi_params.y * 0.35 + sin(u.time_params.x * 0.11) * 0.08;
+    let pitch = (u.time_params.w - 0.5) * 0.28;
+    var dir = normalize(vec3<f32>(
+        (screen_uv.x * 2.0 - 1.0) * aspect,
+        (1.0 - screen_uv.y * 2.0) * 0.78,
+        -1.18
+    ));
+    dir = rotate_y(rotate_x(dir, pitch), yaw);
+
+    let tx = 1.0 / max(abs(dir.x), 0.0001);
+    let ty = 1.0 / max(abs(dir.y), 0.0001);
+    let tz = 1.0 / max(abs(dir.z), 0.0001);
+    let t_hit = min(tx, min(ty, tz));
+    let hit = dir * t_hit;
+
+    var wall_uv = vec2<f32>(hit.x * 0.5 + 0.5, hit.y * 0.5 + 0.5);
+    if (tx < ty && tx < tz) {
+        wall_uv = vec2<f32>(hit.z * 0.5 + 0.5, hit.y * 0.5 + 0.5);
+    } else if (ty < tz) {
+        wall_uv = vec2<f32>(hit.x * 0.5 + 0.5, hit.z * 0.5 + 0.5);
+    }
+
+    return safe_uv(wall_uv);
 }
 
 fn distorted_uv(uv_in: vec2<f32>) -> vec2<f32> {
@@ -175,7 +217,9 @@ fn distorted_uv(uv_in: vec2<f32>) -> vec2<f32> {
         uv = (floor(uv * cells) + vec2<f32>(0.5)) / cells;
     }
 
-    return safe_uv(kaleidoscope(uv, u.controls1.w));
+    uv = kaleidoscope(uv, u.controls1.w);
+    uv = tunnel(uv, u.effect_params.x);
+    return safe_uv(uv);
 }
 
 @vertex
@@ -190,15 +234,32 @@ fn vs_mesh(input: MeshIn) -> MeshOut {
     let rotation = u.controls2.y;
     let aspect = max(u.resolution.x / max(u.resolution.y, 1.0), 0.2);
     let free_camera = 1.0 - step(0.5, u.app_params.x);
+    let inside_box = step(0.5, u.effect_params.y);
     let cube_amount = smoothstep(0.0, 1.0, u.view_params.y);
     let fit = aspect_fit_scale();
-    let object = mix(input.position, input.cube_position, cube_amount);
 
-    var local = vec3<f32>(
-        object.x * 2.15 * fit.x * u.view_params.x,
-        object.y * 1.28 * fit.y * u.view_params.x,
-        object.z * cube_amount * 1.05
+    if (inside_box > 0.5) {
+        var room_out: MeshOut;
+        room_out.position = vec4<f32>(input.position.xy, 0.0, 1.0);
+        room_out.uv = input.uv;
+        room_out.world = vec3<f32>(input.position.xy, 0.0);
+        room_out.face = input.face;
+        return room_out;
+    }
+
+    let object = mix(input.position, input.cube_position, cube_amount);
+    let flat_scale = vec3<f32>(
+        2.15 * fit.x * u.view_params.x,
+        1.28 * fit.y * u.view_params.x,
+        0.0
     );
+    let cube_scale = vec3<f32>(
+        1.12 * u.view_params.x,
+        1.12 * u.view_params.x,
+        1.12 * u.view_params.x
+    );
+    var local = object * mix(flat_scale, cube_scale, cube_amount);
+
     let wave_a = sin(local.x * (2.8 + warp * 5.0) + t * (1.7 + energy * 5.0));
     let wave_b = cos(local.y * (3.6 + pitch * 8.0) - t * (1.2 + abs(bend) * 5.0));
     let ripple = sin(length(local.xy) * (7.0 + warp * 24.0) - t * (2.4 + energy * 12.0));
@@ -207,8 +268,8 @@ fn vs_mesh(input: MeshIn) -> MeshOut {
     local.x += sin(local.y * 4.0 + t) * warp * 0.035;
     local.y += cos(local.x * 3.0 - t * 0.8) * warp * 0.025;
 
-    local = rotate_x(local, ((rotation - 0.5) * 0.55 + bend * 0.16) * free_camera + cube_amount * 0.48);
-    local = rotate_y(local, (sin(t * 0.23) * 0.08 + bend * 0.22 + (pitch - 0.5) * 0.22) * free_camera + cube_amount * (0.78 + rotation * 2.2 + t * 0.18));
+    local = rotate_x(local, ((rotation - 0.5) * 0.55 + bend * 0.16) * free_camera + cube_amount * 0.58);
+    local = rotate_y(local, (sin(t * 0.23) * 0.08 + bend * 0.22 + (pitch - 0.5) * 0.22) * free_camera + cube_amount * (0.95 + rotation * 2.4 + t * 0.2));
     let p = local + vec3<f32>(0.0, 0.0, -3.15);
 
     let near = 0.05;
@@ -227,7 +288,10 @@ fn vs_mesh(input: MeshIn) -> MeshOut {
 
 @fragment
 fn fs_scene(input: MeshOut) -> @location(0) vec4<f32> {
-    if (input.face > 0.5 && u.view_params.y < 0.015) {
+    if (u.effect_params.y > 0.5 && input.face > 0.5) {
+        discard;
+    }
+    if (u.effect_params.y <= 0.5 && input.face > 0.5 && u.view_params.y < 0.015) {
         discard;
     }
 
@@ -235,7 +299,12 @@ fn fs_scene(input: MeshOut) -> @location(0) vec4<f32> {
     let energy = u.time_params.z;
     let gate = u.midi_params.x;
     let shock = u.midi_params.z;
-    let uv = distorted_uv(input.uv);
+    var source_uv = input.uv;
+    if (u.effect_params.y > 0.5) {
+        source_uv = room_projection(input.uv);
+    }
+
+    let uv = distorted_uv(source_uv);
     let texel = vec2<f32>(1.0) / max(u.resolution.zw, vec2<f32>(1.0));
 
     let chroma = (u.controls0.y * 0.012 + shock * 0.010);
@@ -245,17 +314,21 @@ fn fs_scene(input: MeshOut) -> @location(0) vec4<f32> {
     ) + vec2<f32>(0.001));
 
     let r = textureSample(source_tex, source_sampler, safe_uv(uv + chroma_axis * chroma)).r;
-    let raw_color = textureSample(source_tex, source_sampler, uv).rgb;
+    let raw_sample = textureSample(source_tex, source_sampler, uv);
+    let raw_color = raw_sample.rgb;
     let g = raw_color.g;
     let b = textureSample(source_tex, source_sampler, safe_uv(uv - chroma_axis * chroma)).b;
     var color = vec3<f32>(r, g, b);
-    var matte = 1.0;
+    var matte = raw_sample.a;
+    let black_floor = 0.018;
+    color = max(color - vec3<f32>(black_floor), vec3<f32>(0.0)) / (1.0 - black_floor);
 
     if (u.chroma_key.w > 0.5) {
         let distance_to_key = distance(raw_color, u.chroma_key.rgb);
-        matte = smoothstep(u.chroma_params.x, u.chroma_params.x + u.chroma_params.y, distance_to_key);
+        let key_matte = smoothstep(u.chroma_params.x, u.chroma_params.x + u.chroma_params.y, distance_to_key);
+        matte *= key_matte;
         let spill_target = max(color.r, color.b);
-        color.g = mix(color.g, min(color.g, spill_target), (1.0 - matte) * u.chroma_params.z);
+        color.g = mix(color.g, min(color.g, spill_target), (1.0 - key_matte) * u.chroma_params.z);
     }
 
     let edge_amount = u.controls2.w;
@@ -305,29 +378,10 @@ fn fs_scene(input: MeshOut) -> @location(0) vec4<f32> {
         color = mix(color, solar, invert * (0.5 + 0.5 * gate));
     }
 
-    let grain = (hash21(input.uv * u.resolution.xy + vec2<f32>(floor(t * 60.0))) - 0.5) * (0.015 + energy * 0.025 + shock * 0.035);
-    color += vec3<f32>(grain);
-
-    let vignette = 1.0 - smoothstep(0.18, 0.92, length(input.uv - vec2<f32>(0.5)));
-    color *= mix(1.0, vignette, 0.22 + u.controls3.x * 0.52);
-
-    let oscilloscope = u.view_params.z;
-    if (oscilloscope > 0.001) {
-        let trace_a = scope_trace(input.uv, 0.28, 0.28, 0.22, 0.007 + oscilloscope * 0.012);
-        let trace_b = scope_trace(input.uv, 0.50, 0.52, 0.28, 0.008 + oscilloscope * 0.014);
-        let trace_c = scope_trace(input.uv, 0.72, 0.76, 0.18, 0.006 + oscilloscope * 0.010);
-        let trace = min(trace_a + trace_b * 0.9 + trace_c * 0.72, 1.8);
-        let grid_x = 1.0 - smoothstep(0.0, 0.010, abs(fract(input.uv.x * 10.0) - 0.5));
-        let grid_y = 1.0 - smoothstep(0.0, 0.010, abs(fract(input.uv.y * 8.0) - 0.5));
-        let fine_grid = 1.0 - smoothstep(0.0, 0.004, abs(fract(input.uv.x * 50.0) - 0.5));
-        let scan = 0.42 + 0.58 * sin(input.uv.y * u.resolution.y * 3.14159265);
-        let vignette_scope = 1.0 - smoothstep(0.38, 0.82, length(input.uv - vec2<f32>(0.5)));
-        let phosphor_noise = hash21(input.uv * u.resolution.xy + vec2<f32>(floor(t * 30.0))) * 0.035;
-        let scope = vec3<f32>(0.02, 0.22, 0.035)
-            + vec3<f32>(0.0, 0.28, 0.08) * (max(grid_x, grid_y) * 0.7 + fine_grid * 0.12)
-            + vec3<f32>(0.18, 1.0, 0.32) * trace * scan
-            + vec3<f32>(0.0, phosphor_noise, phosphor_noise * 0.3);
-        color = mix(color, scope * (0.72 + vignette_scope * 0.55), oscilloscope);
+    let grain_amount = u.controls1.y * 0.025 + shock * 0.035 + u.chroma_params.w * 0.012;
+    if (grain_amount > 0.001) {
+        let grain = (hash21(input.uv * u.resolution.xy + vec2<f32>(floor(t * 60.0))) - 0.5) * grain_amount;
+        color += vec3<f32>(grain);
     }
 
     color *= matte;
@@ -353,7 +407,10 @@ fn vs_fullscreen(@builtin(vertex_index) vertex_index: u32) -> FullscreenOut {
 fn fs_present(input: FullscreenOut) -> @location(0) vec4<f32> {
     let sample = textureSample(source_tex, source_sampler, safe_uv(input.uv));
     var color = sample.rgb * sample.a;
-    let lift = 0.015 + u.time_params.z * 0.025;
-    color = pow(saturate3(color + vec3<f32>(lift)), vec3<f32>(0.96));
+    let flash = clamp(u.effect_params.z, 0.0, 1.0);
+    if (flash > 0.001) {
+        let strobe = step(0.5, fract(u.time_params.x * 18.0));
+        color = mix(color, vec3<f32>(1.0), flash * strobe);
+    }
     return vec4<f32>(saturate3(color), 1.0);
 }

@@ -80,8 +80,12 @@ const NDI_FRAME_TYPE_NONE: c_int = 0;
 const NDI_FRAME_TYPE_VIDEO: c_int = 1;
 const NDI_FRAME_TYPE_ERROR: c_int = 4;
 const NDI_FRAME_TYPE_STATUS_CHANGE: c_int = 100;
-const NDI_RECV_COLOR_FORMAT_BGRX_BGRA: c_int = 2;
+const NDI_RECV_COLOR_FORMAT_BGRX_BGRA: c_int = 0;
 const NDI_RECV_BANDWIDTH_HIGHEST: c_int = 100;
+const FOURCC_BGRA: c_int = fourcc([b'B', b'G', b'R', b'A']);
+const FOURCC_BGRX: c_int = fourcc([b'B', b'G', b'R', b'X']);
+const FOURCC_RGBA: c_int = fourcc([b'R', b'G', b'B', b'A']);
+const FOURCC_RGBX: c_int = fourcc([b'R', b'G', b'B', b'X']);
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -514,8 +518,39 @@ fn copy_video_frame(video: &NdiVideoFrameV2) -> Option<NdiFrame> {
     for row in 0..height {
         let source_offset = row * source_stride;
         let dest_offset = row * row_bytes;
-        data[dest_offset..dest_offset + row_bytes]
-            .copy_from_slice(&source[source_offset..source_offset + row_bytes]);
+        let source_row = &source[source_offset..source_offset + row_bytes];
+        let dest_row = &mut data[dest_offset..dest_offset + row_bytes];
+
+        match video.four_cc {
+            FOURCC_BGRA => dest_row.copy_from_slice(source_row),
+            FOURCC_BGRX => {
+                dest_row.copy_from_slice(source_row);
+                for pixel in dest_row.chunks_exact_mut(4) {
+                    pixel[3] = 0xff;
+                }
+            }
+            FOURCC_RGBA => {
+                for (source_pixel, dest_pixel) in
+                    source_row.chunks_exact(4).zip(dest_row.chunks_exact_mut(4))
+                {
+                    dest_pixel[0] = source_pixel[2];
+                    dest_pixel[1] = source_pixel[1];
+                    dest_pixel[2] = source_pixel[0];
+                    dest_pixel[3] = source_pixel[3];
+                }
+            }
+            FOURCC_RGBX => {
+                for (source_pixel, dest_pixel) in
+                    source_row.chunks_exact(4).zip(dest_row.chunks_exact_mut(4))
+                {
+                    dest_pixel[0] = source_pixel[2];
+                    dest_pixel[1] = source_pixel[1];
+                    dest_pixel[2] = source_pixel[0];
+                    dest_pixel[3] = 0xff;
+                }
+            }
+            _ => dest_row.copy_from_slice(source_row),
+        }
     }
 
     Some(NdiFrame {
@@ -523,6 +558,13 @@ fn copy_video_frame(video: &NdiVideoFrameV2) -> Option<NdiFrame> {
         height: height as u32,
         data,
     })
+}
+
+const fn fourcc(tag: [u8; 4]) -> c_int {
+    (tag[0] as c_int)
+        | ((tag[1] as c_int) << 8)
+        | ((tag[2] as c_int) << 16)
+        | ((tag[3] as c_int) << 24)
 }
 
 #[derive(Clone)]

@@ -99,6 +99,7 @@ fn main() {
                             &mut last_reset_event_counter,
                         ) {
                             midi.reset_effect_values(&settings.midi_bindings);
+                            settings.reset_effects_to_clean();
                             renderer.reset_effects();
                             midi_snapshot = midi.snapshot();
                         }
@@ -216,6 +217,7 @@ fn handle_ui_action(action: UiAction, context: &mut UiActionContext<'_>) {
             context
                 .midi
                 .reset_effect_values(&context.settings.midi_bindings);
+            context.settings.reset_effects_to_clean();
             context.renderer.reset_effects();
         }
         UiAction::SaveSettings(settings) => {

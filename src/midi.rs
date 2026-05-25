@@ -13,6 +13,7 @@ pub struct MidiController {
 #[derive(Clone, Copy, Debug)]
 pub struct MidiSnapshot {
     pub cc: [f32; 128],
+    pub notes: [f32; 128],
     pub last_event: Option<MidiEvent>,
     pub note_energy: f32,
     pub pitch: f32,
@@ -26,6 +27,7 @@ impl Default for MidiSnapshot {
     fn default() -> Self {
         Self {
             cc: [0.0; 128],
+            notes: [0.0; 128],
             last_event: None,
             note_energy: 0.0,
             pitch: 0.5,
@@ -159,8 +161,14 @@ impl MidiController {
             state.last_pitch as f32 / 127.0
         };
 
+        let mut notes = [0.0; 128];
+        for (index, velocity) in state.notes.iter().copied().enumerate() {
+            notes[index] = velocity as f32 / 127.0;
+        }
+
         MidiSnapshot {
             cc: state.cc,
+            notes,
             last_event: state.last_event,
             note_energy: (max_velocity as f32 / 127.0).max((total_velocity / 6.0).min(1.0)),
             pitch,

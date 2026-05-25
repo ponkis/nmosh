@@ -83,7 +83,7 @@ impl Renderer {
             .formats
             .iter()
             .copied()
-            .find(|format| format.is_srgb())
+            .find(|format| !format.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
         let present_mode = surface_caps
             .present_modes
@@ -410,7 +410,7 @@ impl Renderer {
             [target_aspect / window_aspect, 1.0]
         };
 
-        let zoom = settings.zoom.clamp(0.25, 4.0);
+        let zoom = zoom_factor(settings.zoom);
         let local_x = ndc_x / (fit[0] * zoom).max(0.001);
         let local_y = ndc_y / (fit[1] * zoom).max(0.001);
         if !(-1.0..=1.0).contains(&local_x) || !(-1.0..=1.0).contains(&local_y) {
@@ -418,6 +418,7 @@ impl Renderer {
         }
 
         let mut uv = [(local_x + 1.0) * 0.5, (1.0 - local_y) * 0.5];
+        uv[1] = 1.0 - uv[1];
         if settings.input_flip_x {
             uv[0] = 1.0 - uv[0];
         }
@@ -526,7 +527,12 @@ impl Renderer {
                     view: &self.feedback[write_index].view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 0.0,
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -622,10 +628,7 @@ impl Renderer {
                 .min(1.0),
             1.0 + mappings.binding(MidiControl::Brightness).value_from(&cc) * 0.45
                 + self.smooth.energy * 0.10,
-            (mappings.binding(MidiControl::Hue).value_from(&cc)
-                + self.smooth.pitch * 0.22
-                + self.smooth.bend * 0.08)
-                .fract(),
+            mappings.binding(MidiControl::Hue).value_from(&cc),
             (mappings.binding(MidiControl::Feedback).value_from(&cc) * 0.92
                 + self.smooth.energy * 0.04)
                 .min(0.96),
@@ -639,11 +642,13 @@ impl Renderer {
             mappings.binding(MidiControl::Rotation).value_from(&cc),
             mappings.binding(MidiControl::Pixelate).value_from(&cc),
             mappings.binding(MidiControl::Edge).value_from(&cc),
-            mappings.binding(MidiControl::Vignette).value_from(&cc),
+            mappings.binding(MidiControl::Tunnel).value_from(&cc),
             mappings.binding(MidiControl::Invert).value_from(&cc),
             mappings.binding(MidiControl::Zoom).value_from(&cc),
             mappings.binding(MidiControl::Cube).value_from(&cc),
-            mappings.binding(MidiControl::Oscilloscope).value_from(&cc),
+            mappings
+                .binding(MidiControl::Flash)
+                .value_from_sources(&cc, &midi.notes),
             mappings
                 .binding(MidiControl::ChromaTolerance)
                 .value_from(&cc),
@@ -696,16 +701,13 @@ impl Renderer {
             settings.aspect_mode.as_uniform(),
         ];
         self.uniform.view_params = [
-            (settings.zoom + self.smooth.controls[MidiControl::Zoom as usize] * 2.0)
-                .clamp(0.25, 4.0),
+            zoom_factor(settings.zoom + self.smooth.controls[MidiControl::Zoom as usize] * 24.0),
             (settings
                 .cube_amount
-                .max(self.smooth.controls[MidiControl::Cube as usize]))
+                .max(self.smooth.controls[MidiControl::Cube as usize])
+                .max(if settings.inside_box { 1.0 } else { 0.0 }))
             .clamp(0.0, 1.0),
-            (settings
-                .oscilloscope_amount
-                .max(self.smooth.controls[MidiControl::Oscilloscope as usize]))
-            .clamp(0.0, 1.0),
+            0.0,
             settings
                 .posterize_amount
                 .max(self.smooth.controls[MidiControl::Posterize as usize])
@@ -733,6 +735,18 @@ impl Renderer {
                 .thermal_amount
                 .max(self.smooth.controls[MidiControl::Thermal as usize])
                 .clamp(0.0, 1.0),
+        ];
+        self.uniform.effect_params = [
+            settings
+                .tunnel_amount
+                .max(self.smooth.controls[MidiControl::Tunnel as usize])
+                .clamp(0.0, 1.0),
+            if settings.inside_box { 1.0 } else { 0.0 },
+            mappings
+                .binding(MidiControl::Flash)
+                .value_from_sources(&cc, &midi.notes)
+                .clamp(0.0, 1.0),
+            0.0,
         ];
     }
 
@@ -794,6 +808,7 @@ struct Uniforms {
     view_params: [f32; 4],
     chroma_key: [f32; 4],
     chroma_params: [f32; 4],
+    effect_params: [f32; 4],
 }
 
 impl Uniforms {
@@ -808,13 +823,14 @@ impl Uniforms {
                 video_height as f32,
             ],
             controls0: [0.0, 0.0, 1.0, 0.0],
-            controls1: [0.12, 0.0, 0.0, 0.0],
+            controls1: [0.0, 0.0, 0.0, 0.0],
             controls2: [0.3, 0.0, 0.0, 0.0],
             controls3: [0.0, 0.0, 0.0, 0.0],
-            app_params: [0.0, 0.0, 1.0, 0.0],
+            app_params: [0.0, 0.0, 0.0, 0.0],
             view_params: [1.0, 0.0, 0.0, 0.0],
             chroma_key: [0.0, 1.0, 0.0, 0.0],
             chroma_params: [0.22, 0.12, 0.35, 0.0],
+            effect_params: [0.0, 0.0, 0.0, 0.0],
         }
     }
 }
@@ -1013,10 +1029,7 @@ fn create_texture(
 }
 
 fn initial_video_pixels() -> [u8; 16] {
-    [
-        0x00, 0x10, 0x18, 0xff, 0x20, 0x20, 0x80, 0xff, 0x30, 0x80, 0x20, 0xff, 0x90, 0x30, 0x30,
-        0xff,
-    ]
+    [0; 16]
 }
 
 fn nonzero_size(size: PhysicalSize<u32>) -> PhysicalSize<u32> {
@@ -1029,4 +1042,8 @@ fn response(dt: f32, speed: f32) -> f32 {
 
 fn lerp(a: f32, b: f32, amount: f32) -> f32 {
     a + (b - a) * amount.clamp(0.0, 1.0)
+}
+
+fn zoom_factor(zoom: f32) -> f32 {
+    2.0_f32.powf(zoom.clamp(-64.0, 64.0))
 }

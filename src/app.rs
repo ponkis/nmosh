@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 pub const APP_NAME: &str = "nMosh";
 pub const APP_CREDIT: &str = "by ponkis powered by ponkis.xyz";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
-const SETTINGS_VERSION: u32 = 2;
+const SETTINGS_VERSION: u32 = 4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -59,7 +59,8 @@ pub struct AppSettings {
     pub input_flip_y: bool,
     pub zoom: f32,
     pub cube_amount: f32,
-    pub oscilloscope_amount: f32,
+    pub inside_box: bool,
+    pub tunnel_amount: f32,
     pub posterize_amount: f32,
     pub thermal_amount: f32,
     pub chroma_key: ChromaKeySettings,
@@ -69,13 +70,25 @@ pub struct AppSettings {
 impl AppSettings {
     pub fn sanitized(mut self) -> Self {
         self.settings_version = SETTINGS_VERSION;
-        self.zoom = self.zoom.clamp(0.25, 4.0);
+        if !self.zoom.is_finite() {
+            self.zoom = 0.0;
+        }
         self.cube_amount = self.cube_amount.clamp(0.0, 1.0);
-        self.oscilloscope_amount = self.oscilloscope_amount.clamp(0.0, 1.0);
+        self.tunnel_amount = self.tunnel_amount.clamp(0.0, 1.0);
         self.posterize_amount = self.posterize_amount.clamp(0.0, 1.0);
         self.thermal_amount = self.thermal_amount.clamp(0.0, 1.0);
         self.chroma_key = self.chroma_key.sanitized();
         self
+    }
+
+    pub fn reset_effects_to_clean(&mut self) {
+        self.zoom = 0.0;
+        self.cube_amount = 0.0;
+        self.inside_box = false;
+        self.tunnel_amount = 0.0;
+        self.posterize_amount = 0.0;
+        self.thermal_amount = 0.0;
+        self.chroma_key.enabled = false;
     }
 }
 
@@ -86,10 +99,11 @@ impl Default for AppSettings {
             camera_mode: CameraMode::Free,
             aspect_mode: AspectMode::Source,
             input_flip_x: false,
-            input_flip_y: true,
-            zoom: 1.0,
+            input_flip_y: false,
+            zoom: 0.0,
             cube_amount: 0.0,
-            oscilloscope_amount: 0.0,
+            inside_box: false,
+            tunnel_amount: 0.0,
             posterize_amount: 0.0,
             thermal_amount: 0.0,
             chroma_key: ChromaKeySettings::default(),
@@ -229,6 +243,14 @@ impl MidiBinding {
         }
     }
 
+    pub fn value_from_sources(self, cc: &[f32; 128], notes: &[f32; 128]) -> f32 {
+        match self.source {
+            MidiSource::ControlChange => cc[self.number.min(127) as usize],
+            MidiSource::Note => notes[self.number.min(127) as usize],
+            MidiSource::None => 0.0,
+        }
+    }
+
     pub fn matches(self, event: MidiEvent) -> bool {
         self.source == event.source && self.number == event.number
     }
@@ -283,11 +305,11 @@ pub enum MidiControl {
     Rotation = 9,
     Pixelate = 10,
     Edge = 11,
-    Vignette = 12,
+    Tunnel = 12,
     Invert = 13,
     Zoom = 14,
     Cube = 15,
-    Oscilloscope = 16,
+    Flash = 16,
     ChromaTolerance = 17,
     ChromaSoftness = 18,
     Posterize = 19,
@@ -308,11 +330,11 @@ pub const MIDI_CONTROLS: [MidiControl; MIDI_CONTROL_COUNT] = [
     MidiControl::Rotation,
     MidiControl::Pixelate,
     MidiControl::Edge,
-    MidiControl::Vignette,
+    MidiControl::Tunnel,
     MidiControl::Invert,
     MidiControl::Zoom,
     MidiControl::Cube,
-    MidiControl::Oscilloscope,
+    MidiControl::Flash,
     MidiControl::ChromaTolerance,
     MidiControl::ChromaSoftness,
     MidiControl::Posterize,
@@ -333,11 +355,11 @@ pub const MIDI_CONTROL_LABELS: [&str; MIDI_CONTROL_COUNT] = [
     "3D rotation",
     "Pixelation",
     "Edge enhancement",
-    "Vignette",
+    "Tunnel",
     "Invert / solarize",
     "Zoom",
     "Cube morph",
-    "Oscilloscope",
+    "White flash / strobe",
     "Chroma tolerance",
     "Chroma softness",
     "Posterize",
@@ -387,6 +409,15 @@ impl SettingsStore {
             .map_err(|error| format!("could not parse {}: {error}", self.path.display()))?;
         if loaded_version < 2 {
             settings.input_flip_x = false;
+        }
+        if loaded_version < 3 {
+            settings.input_flip_y = false;
+            settings.zoom = 0.0;
+            settings.tunnel_amount = 0.0;
+            settings.inside_box = false;
+        }
+        if loaded_version < 4 {
+            settings.reset_effects_to_clean();
         }
         Ok(settings.sanitized())
     }
