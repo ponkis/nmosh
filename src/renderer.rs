@@ -655,8 +655,6 @@ impl Renderer {
             mappings
                 .binding(MidiControl::ChromaSoftness)
                 .value_from(&cc),
-            mappings.binding(MidiControl::Posterize).value_from(&cc),
-            mappings.binding(MidiControl::Thermal).value_from(&cc),
             mappings.binding(MidiControl::Spare).value_from(&cc),
         ];
 
@@ -708,10 +706,7 @@ impl Renderer {
                 .max(if settings.inside_box { 1.0 } else { 0.0 }))
             .clamp(0.0, 1.0),
             0.0,
-            settings
-                .posterize_amount
-                .max(self.smooth.controls[MidiControl::Posterize as usize])
-                .clamp(0.0, 1.0),
+            0.0,
         ];
         self.uniform.chroma_key = [
             settings.chroma_key.color[0],
@@ -731,10 +726,7 @@ impl Renderer {
                 + self.smooth.controls[MidiControl::ChromaSoftness as usize] * 0.5)
                 .clamp(0.001, 1.0),
             settings.chroma_key.spill,
-            settings
-                .thermal_amount
-                .max(self.smooth.controls[MidiControl::Thermal as usize])
-                .clamp(0.0, 1.0),
+            0.0,
         ];
         self.uniform.effect_params = [
             settings

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 pub const APP_NAME: &str = "nMosh";
 pub const APP_CREDIT: &str = "by ponkis powered by ponkis.xyz";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
-const SETTINGS_VERSION: u32 = 4;
+const SETTINGS_VERSION: u32 = 5;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -61,8 +61,6 @@ pub struct AppSettings {
     pub cube_amount: f32,
     pub inside_box: bool,
     pub tunnel_amount: f32,
-    pub posterize_amount: f32,
-    pub thermal_amount: f32,
     pub chroma_key: ChromaKeySettings,
     pub midi_bindings: MidiBindings,
 }
@@ -75,8 +73,6 @@ impl AppSettings {
         }
         self.cube_amount = self.cube_amount.clamp(0.0, 1.0);
         self.tunnel_amount = self.tunnel_amount.clamp(0.0, 1.0);
-        self.posterize_amount = self.posterize_amount.clamp(0.0, 1.0);
-        self.thermal_amount = self.thermal_amount.clamp(0.0, 1.0);
         self.chroma_key = self.chroma_key.sanitized();
         self
     }
@@ -86,8 +82,6 @@ impl AppSettings {
         self.cube_amount = 0.0;
         self.inside_box = false;
         self.tunnel_amount = 0.0;
-        self.posterize_amount = 0.0;
-        self.thermal_amount = 0.0;
         self.chroma_key.enabled = false;
     }
 }
@@ -104,8 +98,6 @@ impl Default for AppSettings {
             cube_amount: 0.0,
             inside_box: false,
             tunnel_amount: 0.0,
-            posterize_amount: 0.0,
-            thermal_amount: 0.0,
             chroma_key: ChromaKeySettings::default(),
             midi_bindings: MidiBindings::default(),
         }
@@ -190,8 +182,6 @@ impl Default for MidiBindings {
                 MidiBinding::cc(72),
                 MidiBinding::cc(73),
                 MidiBinding::cc(75),
-                MidiBinding::cc(76),
-                MidiBinding::cc(77),
                 MidiBinding::cc(78),
             ],
             reset_effects: MidiBinding::note(60),
@@ -288,7 +278,7 @@ impl MidiEvent {
     }
 }
 
-pub const MIDI_CONTROL_COUNT: usize = 22;
+pub const MIDI_CONTROL_COUNT: usize = 20;
 
 #[repr(usize)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -312,9 +302,7 @@ pub enum MidiControl {
     Flash = 16,
     ChromaTolerance = 17,
     ChromaSoftness = 18,
-    Posterize = 19,
-    Thermal = 20,
-    Spare = 21,
+    Spare = 19,
 }
 
 pub const MIDI_CONTROLS: [MidiControl; MIDI_CONTROL_COUNT] = [
@@ -337,8 +325,6 @@ pub const MIDI_CONTROLS: [MidiControl; MIDI_CONTROL_COUNT] = [
     MidiControl::Flash,
     MidiControl::ChromaTolerance,
     MidiControl::ChromaSoftness,
-    MidiControl::Posterize,
-    MidiControl::Thermal,
     MidiControl::Spare,
 ];
 
@@ -362,8 +348,6 @@ pub const MIDI_CONTROL_LABELS: [&str; MIDI_CONTROL_COUNT] = [
     "White flash / strobe",
     "Chroma tolerance",
     "Chroma softness",
-    "Posterize",
-    "Thermal color",
     "Spare",
 ];
 
@@ -399,12 +383,26 @@ impl SettingsStore {
     pub fn load(&self) -> Result<AppSettings, String> {
         let data = fs::read_to_string(&self.path)
             .map_err(|error| format!("could not read {}: {error}", self.path.display()))?;
-        let value = serde_json::from_str::<serde_json::Value>(&data)
+        let mut value = serde_json::from_str::<serde_json::Value>(&data)
             .map_err(|error| format!("could not parse {}: {error}", self.path.display()))?;
         let loaded_version = value
             .get("settings_version")
             .and_then(|value| value.as_u64())
             .unwrap_or(0) as u32;
+
+        if loaded_version < 5 {
+            if let Some(midi_bindings) = value.get_mut("midi_bindings") {
+                if let Some(controls) = midi_bindings.get_mut("controls") {
+                    if let Some(arr) = controls.as_array_mut() {
+                        if arr.len() == 22 {
+                            arr.remove(20); // Thermal (index 20)
+                            arr.remove(19); // Posterize (index 19)
+                        }
+                    }
+                }
+            }
+        }
+
         let mut settings = serde_json::from_value::<AppSettings>(value)
             .map_err(|error| format!("could not parse {}: {error}", self.path.display()))?;
         if loaded_version < 2 {
@@ -417,6 +415,9 @@ impl SettingsStore {
             settings.inside_box = false;
         }
         if loaded_version < 4 {
+            settings.reset_effects_to_clean();
+        }
+        if loaded_version < 5 {
             settings.reset_effects_to_clean();
         }
         Ok(settings.sanitized())

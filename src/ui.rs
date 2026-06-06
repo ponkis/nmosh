@@ -432,8 +432,6 @@ impl Overlay {
         ui.add(egui::Slider::new(&mut settings.cube_amount, 0.0..=1.0).text("Cube morph"));
         ui.checkbox(&mut settings.inside_box, "Inside box");
         ui.add(egui::Slider::new(&mut settings.tunnel_amount, 0.0..=1.0).text("Tunnel"));
-        ui.add(egui::Slider::new(&mut settings.posterize_amount, 0.0..=1.0).text("Posterize"));
-        ui.add(egui::Slider::new(&mut settings.thermal_amount, 0.0..=1.0).text("Thermal color"));
         if ui.button("Reset effects now").clicked() {
             actions.push(UiAction::ResetEffects);
         }

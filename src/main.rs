@@ -46,10 +46,19 @@ fn main() {
     let mut settings = settings_store.load_or_default();
 
     let event_loop = EventLoop::new().expect("failed to create event loop");
-    let window = WindowBuilder::new()
+    let icon_bytes = include_bytes!("icon_rgba.bin");
+    let icon = winit::window::Icon::from_rgba(icon_bytes.to_vec(), 64, 64).ok();
+
+    let mut window_builder = WindowBuilder::new()
         .with_title(format!("{APP_NAME} v{APP_VERSION}"))
         .with_inner_size(LogicalSize::new(options.width, options.height))
-        .with_min_inner_size(LogicalSize::new(640_u32, 360_u32))
+        .with_min_inner_size(LogicalSize::new(640_u32, 360_u32));
+
+    if let Some(icon) = icon {
+        window_builder = window_builder.with_window_icon(Some(icon));
+    }
+
+    let window = window_builder
         .build(&event_loop)
         .expect("failed to create native window");
 

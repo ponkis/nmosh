@@ -97,15 +97,7 @@ fn hue_rotate(color: vec3<f32>, amount: f32) -> vec3<f32> {
     return saturate3(vec3<f32>(dot(color, r), dot(color, g), dot(color, b)));
 }
 
-fn thermal_color(lum: f32) -> vec3<f32> {
-    let blue = vec3<f32>(0.02, 0.05, 0.35);
-    let cyan = vec3<f32>(0.0, 0.85, 0.95);
-    let yellow = vec3<f32>(1.0, 0.92, 0.12);
-    let red = vec3<f32>(1.0, 0.05, 0.02);
-    let a = mix(blue, cyan, smoothstep(0.0, 0.38, lum));
-    let b = mix(yellow, red, smoothstep(0.62, 1.0, lum));
-    return mix(a, b, smoothstep(0.35, 0.75, lum));
-}
+
 
 fn aspect_fit_scale() -> vec2<f32> {
     let window_aspect = max(u.resolution.x / max(u.resolution.y, 1.0), 0.1);
@@ -344,17 +336,7 @@ fn fs_scene(input: MeshOut) -> @location(0) vec4<f32> {
     color = hue_rotate(color, u.controls0.w);
     color *= u.controls0.z;
 
-    let posterize = u.view_params.w;
-    if (posterize > 0.001) {
-        let levels = mix(32.0, 4.0, posterize);
-        color = mix(color, floor(color * levels) / levels, posterize);
-    }
 
-    let thermal = u.chroma_params.w;
-    if (thermal > 0.001) {
-        let lum = dot(color, vec3<f32>(0.299, 0.587, 0.114));
-        color = mix(color, thermal_color(lum), thermal);
-    }
 
     let feedback_amount = u.controls1.x;
     if (feedback_amount > 0.001) {
@@ -378,7 +360,7 @@ fn fs_scene(input: MeshOut) -> @location(0) vec4<f32> {
         color = mix(color, solar, invert * (0.5 + 0.5 * gate));
     }
 
-    let grain_amount = u.controls1.y * 0.025 + shock * 0.035 + u.chroma_params.w * 0.012;
+    let grain_amount = u.controls1.y * 0.025 + shock * 0.035;
     if (grain_amount > 0.001) {
         let grain = (hash21(input.uv * u.resolution.xy + vec2<f32>(floor(t * 60.0))) - 0.5) * grain_amount;
         color += vec3<f32>(grain);

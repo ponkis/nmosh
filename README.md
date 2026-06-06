@@ -1,8 +1,8 @@
 # nMosh
 
-by ponkis powered by ponkis.xyz
+by **ponkis** | powered by [ponkis.xyz](https://ponkis.xyz)
 
-Native Rust desktop video processor for NDI video and MIDI-driven GPU distortion. nMosh receives an NDI source, listens to MIDI input, runs distortion/feedback/3D mesh effects with `wgpu`, and displays the result in a fullscreen-capable native desktop window.
+Native Rust desktop video processor for NDI video and MIDI-driven GPU distortion. **nMosh** receives an NDI source, listens to MIDI input, runs distortion/feedback/3D mesh effects with `wgpu`, and displays the result in a fullscreen-capable native desktop window.
 
 Version: `1.0.0`
 
@@ -34,7 +34,7 @@ Select specific devices by substring:
 .\target\release\nmosh.exe --ndi "OBS" --midi "Launch"
 ```
 
-If the app cannot find the NDI runtime automatically, pass the DLL directly:
+If the app cannot find the NDI runtime automatically, pass the DLL path directly:
 
 ```powershell
 .\target\release\nmosh.exe --ndi-dll "C:\Program Files\NDI\NDI 6 Runtime\v6\Processing.NDI.Lib.x64.dll"
@@ -64,12 +64,12 @@ The in-app options overlay is tabbed and scrolls inside the window. It can recon
 
 Camera modes:
 
-- Free camera: current reactive 3D view
-- Fixed camera: camera stays pointed at the media plane while 3D mesh movement remains active
+- **Free camera**: reactive 3D view driven by MIDI energy, bend, and pitch.
+- **Fixed camera**: camera stays pointed at the media plane while 3D mesh movement remains active.
 
-Default video orientation correction flips vertically only. The options overlay exposes horizontal and vertical toggles if another source needs different handling. Older saved settings are migrated so the previous horizontal-flip default is not preserved accidentally.
+Default video orientation correction flips vertically only. The options overlay exposes horizontal and vertical toggles if another source needs different handling. Older saved settings are migrated automatically to settings version 5.
 
-Settings can be saved to:
+Settings are saved to:
 
 ```text
 %APPDATA%\ponkis\nMosh\settings.json
@@ -79,14 +79,12 @@ If options contain unsaved changes, closing the options panel prompts to save, d
 
 ## Chroma Key
 
-The chroma key section masks a selected color from the raw NDI video before hue, thermal, chromatic split, and other color effects. Use the color picker manually, or click `Eyedropper` and then click the video outside the options panel to sample a key color from the current NDI frame.
+The chroma key section masks a selected color from the raw NDI video before hue, chromatic split, and other color effects. Use the color picker manually, or click `Eyedropper` and then click the video outside the options panel to sample a key color from the current NDI frame.
 
 ## Added Effects
 
-- Cube morph: smoothly transforms the NDI plane into a local-space 3D cube while keeping the existing distortion stack active
-- Oscilloscope: multi-trace green CRT waveform view
-- Posterize: stepped color levels
-- Thermal color: heat-map style recoloring
+- **Cube morph**: smoothly transforms the NDI plane into a local-space 3D cube while keeping the existing distortion stack active.
+- **Tunnel**: radial mapping distortion that creates a zooming feedback tunnel.
 
 ## MIDI Mapping
 
@@ -108,15 +106,14 @@ Default bindings:
 - `CC 17`: 3D rotation
 - `CC 18`: pixelation
 - `CC 19`: edge enhancement
-- `CC 20`: vignette
+- `CC 20`: tunnel
 - `CC 21`: invert/solarize
 - `CC 74`: zoom
 - `CC 71`: cube morph
-- `CC 72`: oscilloscope
+- `CC 72`: white flash/strobe
 - `CC 73`: chroma tolerance
 - `CC 75`: chroma softness
-- `CC 76`: posterize
-- `CC 77`: thermal color
+- `CC 78`: spare
 - `Note 60`: reset effects
 
 If no MIDI device is present, nMosh still runs and shows the NDI stream with baseline GPU processing.
