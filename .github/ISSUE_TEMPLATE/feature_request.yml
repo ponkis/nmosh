@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest a focused improvement to nMosh
+labels: ["enhancement"]
+body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checklist
+      options:
+        - label: I searched existing issues for a similar request.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What visual workflow or limitation would this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you would like nMosh to provide.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include current workarounds or other approaches you considered.
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add mockups, controller details, references, or example media.
+    validations:
+      required: false

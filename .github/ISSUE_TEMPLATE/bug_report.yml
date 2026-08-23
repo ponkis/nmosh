@@ -1,0 +1,80 @@
+name: Bug report
+description: Report a reproducible problem with nMosh
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. Do not include sensitive
+        information or report security vulnerabilities here; use the private
+        process in SECURITY.md instead.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checklist
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: I can reproduce this with the latest released version or current source.
+          required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start nMosh with ...
+        2. Connect ...
+        3. Change ...
+        4. Observe ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: nMosh version
+      placeholder: "1.0.0 or commit SHA"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2 (build 26100)"
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and driver
+      placeholder: "GPU model and driver version"
+    validations:
+      required: true
+  - type: input
+    id: ndi
+    attributes:
+      label: NDI runtime and source
+      description: Include the runtime version and sending application or device when relevant.
+    validations:
+      required: false
+  - type: input
+    id: midi
+    attributes:
+      label: MIDI device
+      description: Include the controller and connection type when relevant.
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and supporting media
+      description: Paste relevant log output and attach screenshots or a short capture.
+      render: text
+    validations:
+      required: false

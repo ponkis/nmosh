@@ -2,7 +2,14 @@
 name = "nmosh"
 version = "1.0.0"
 edition = "2021"
+authors = ["ponkis"]
+description = "A native NDI video processor with MIDI-controlled GPU effects"
+repository = "https://github.com/ponkis/nmosh"
+homepage = "https://ponkis.xyz"
+readme = "README.md"
 license = "MIT"
+keywords = ["ndi", "midi", "video", "wgpu", "visuals"]
+categories = ["graphics", "multimedia::video"]
 
 [dependencies]
 bytemuck = { version = "1.15", features = ["derive"] }
@@ -21,4 +28,3 @@ winit = "0.29"
 
 [build-dependencies]
 embed-resource = "2.4"
-

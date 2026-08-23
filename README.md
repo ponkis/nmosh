@@ -1,119 +1,140 @@
-# nMosh
+<p align="center">
+  <img src="src/icon.png" alt="nMosh icon" width="112">
+</p>
 
-by **ponkis** | powered by [ponkis.xyz](https://ponkis.xyz)
+<h1 align="center">nMosh</h1>
 
-Native Rust desktop video processor for NDI video and MIDI-driven GPU distortion. **nMosh** receives an NDI source, listens to MIDI input, runs distortion/feedback/3D mesh effects with `wgpu`, and displays the result in a fullscreen-capable native desktop window.
+<p align="center">
+  Native NDI video processing with MIDI-controlled GPU effects.
+</p>
 
-Version: `1.0.0`
+<p align="center">
+  <img alt="Rust" src="https://img.shields.io/badge/Rust-2021-ed6a2c?logo=rust&logoColor=white">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows-0078d4?logo=windows&logoColor=white">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/ponkis/nmosh"></a>
+</p>
 
-This project does not use Electron, web UI technology, Python, or direct Win32 calls. Windowing, GPU rendering, the options overlay, and MIDI are handled through native Rust crates.
+nMosh receives an NDI video source, translates MIDI input into real-time control
+signals, and renders distortion, feedback, chroma-key, and 3D mesh effects with
+`wgpu`. It runs as a native desktop application with a fullscreen output and an
+in-app configuration overlay.
+
+## Features
+
+- Discovers and receives NDI video without linking the NDI SDK at build time.
+- Renders a GPU-native effects pipeline with feedback, glitch, chromatic split,
+  kaleidoscope, pixelation, edge enhancement, scanlines, and color controls.
+- Morphs video between a plane, reactive 3D mesh, cube, and tunnel views.
+- Maps MIDI CC, notes, pitch bend, and aftertouch to visual parameters.
+- Includes MIDI learn with duplicate-binding protection.
+- Provides chroma-key controls with an on-canvas eyedropper.
+- Saves versioned settings and migrates older settings automatically.
+- Works without a MIDI device for clean NDI monitoring and manual control.
 
 ## Requirements
 
-- Rust stable toolchain with `cargo`
-- NDI Runtime or NDI SDK installed
-- `Processing.NDI.Lib.x64.dll` available in a standard NDI install folder, in `PATH`, next to the executable, or passed with `--ndi-dll`
-- A GPU supported by `wgpu`
-- Optional MIDI controller
+- Windows 10 or newer.
+- A current stable [Rust toolchain](https://www.rust-lang.org/tools/install) when
+  building from source.
+- The [NDI Runtime or NDI SDK](https://ndi.video/for-developers/ndi-sdk/download/).
+- A GPU and driver supported by `wgpu`.
+- An NDI sender on the local network.
+- A MIDI controller is optional.
 
-## Run
+## Quick start
+
+Clone the repository and build an optimized executable:
 
 ```powershell
-cargo run --release
+git clone https://github.com/ponkis/nmosh.git
+cd nmosh
+cargo build --release
 ```
 
-Built executable:
+Run nMosh:
 
 ```powershell
 .\target\release\nmosh.exe
 ```
 
-Select specific devices by substring:
+nMosh selects the first available NDI source and MIDI port by default. Select
+devices by a case-insensitive name substring when a setup has multiple inputs:
 
 ```powershell
 .\target\release\nmosh.exe --ndi "OBS" --midi "Launch"
 ```
 
-If the app cannot find the NDI runtime automatically, pass the DLL path directly:
+If the NDI runtime is not discovered automatically, provide it explicitly:
 
 ```powershell
 .\target\release\nmosh.exe --ndi-dll "C:\Program Files\NDI\NDI 6 Runtime\v6\Processing.NDI.Lib.x64.dll"
 ```
 
-You can also set `NMOSH_NDI_DLL` to that DLL path.
+The same path can be set with the `NMOSH_NDI_DLL` environment variable.
 
-## Controls
-
-- `O`: open/close options
-- `C`: cycle camera mode
-- `1`: free camera
-- `2`: fixed camera
-- `F11`: toggle borderless fullscreen
-- `F`: toggle borderless fullscreen
-- `Esc`: close options, leave fullscreen, or quit when already windowed
-
-The title bar shows:
+## Command line
 
 ```text
-nMosh v1.0.0 | MIDI: {device/status} | NDI: {source/status}
+Usage: nmosh [--ndi SOURCE_SUBSTRING] [--ndi-dll PATH]
+             [--midi PORT_SUBSTRING] [--width PX] [--height PX]
 ```
 
-## Options
+| Option | Description |
+| --- | --- |
+| `-h`, `--help` | Print command-line usage. |
+| `--ndi <name>` | Prefer an NDI source whose name contains the value. |
+| `--ndi-dll <path>` | Load the NDI runtime from an explicit path. |
+| `--midi <name>` | Prefer a MIDI port whose name contains the value. |
+| `--width <px>` | Set the initial window width; defaults to `1280`. |
+| `--height <px>` | Set the initial window height; defaults to `720`. |
 
-The in-app options overlay is tabbed and scrolls inside the window. It can reconnect NDI and MIDI inputs, switch camera mode, set source or 4:3 aspect, adjust zoom, flip input orientation, configure chroma key, reset effects, and edit MIDI bindings with MIDI learn.
+## Keyboard controls
 
-Camera modes:
+| Key | Action |
+| --- | --- |
+| `O` | Open or close the options overlay. |
+| `C` | Cycle the camera mode. |
+| `1` | Select the free camera. |
+| `2` | Select the fixed camera. |
+| `F` / `F11` | Toggle borderless fullscreen. |
+| `Esc` | Close options, leave fullscreen, or quit when windowed. |
 
-- **Free camera**: reactive 3D view driven by MIDI energy, bend, and pitch.
-- **Fixed camera**: camera stays pointed at the media plane while 3D mesh movement remains active.
+Settings are stored at `%APPDATA%\ponkis\nMosh\settings.json`. See the
+[configuration guide](docs/CONFIGURATION.md) for effects, chroma key, MIDI
+bindings, and runtime discovery details.
 
-Default video orientation correction flips vertically only. The options overlay exposes horizontal and vertical toggles if another source needs different handling. Older saved settings are migrated automatically to settings version 5.
-
-Settings are saved to:
+## Project layout
 
 ```text
-%APPDATA%\ponkis\nMosh\settings.json
+src/
+├── main.rs                Application entry point and event loop
+├── app.rs                 Settings, migrations, and MIDI binding model
+├── ndi.rs                 Runtime NDI loading, discovery, and frame capture
+├── midi.rs                MIDI connection and normalized controller state
+├── renderer.rs            wgpu resources, render passes, and effect state
+├── ui.rs                  egui options overlay and user actions
+└── shaders/effects.wgsl   Mesh, effects, feedback, and presentation shaders
+docs/                      Architecture and configuration documentation
+build.rs                   Windows resource embedding
+wresources.rc              Windows executable icon resource
 ```
 
-If options contain unsaved changes, closing the options panel prompts to save, discard, or cancel.
+For the runtime data flow and module responsibilities, read
+[Architecture](docs/ARCHITECTURE.md).
 
-## Chroma Key
+## Contributing
 
-The chroma key section masks a selected color from the raw NDI video before hue, chromatic split, and other color effects. Use the color picker manually, or click `Eyedropper` and then click the video outside the options panel to sample a key color from the current NDI frame.
+Bug reports and focused improvements are welcome. Read
+[CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request, use the issue
+templates for reports and requests, and follow the
+[Code of Conduct](CODE_OF_CONDUCT.md). Security issues should be reported
+privately as described in [SECURITY.md](SECURITY.md).
 
-## Added Effects
+## License
 
-- **Cube morph**: smoothly transforms the NDI plane into a local-space 3D cube while keeping the existing distortion stack active.
-- **Tunnel**: radial mapping distortion that creates a zooming feedback tunnel.
+nMosh is available under the [MIT License](LICENSE).
 
-## MIDI Mapping
+Created by [ponkis](https://github.com/ponkis) · [ponkis.xyz](https://ponkis.xyz)
 
-Notes drive energy, pitch, gate, and shock pulses. Pitch bend bends the 3D video plane.
-
-MIDI learn works like a DAW mapping panel: open `MIDI`, click `Learn` for a setting, then move a MIDI control. nMosh prevents duplicate bindings by removing that MIDI source from any previous assignment before applying the new one.
-
-Default bindings:
-
-- `CC 1`: warp/swirl
-- `CC 2`: chromatic split
-- `CC 7`: brightness
-- `CC 10`: hue rotation
-- `CC 11`: feedback amount
-- `CC 12`: glitch amount
-- `CC 13`: scanlines
-- `CC 14`: kaleidoscope
-- `CC 16`: 3D depth
-- `CC 17`: 3D rotation
-- `CC 18`: pixelation
-- `CC 19`: edge enhancement
-- `CC 20`: tunnel
-- `CC 21`: invert/solarize
-- `CC 74`: zoom
-- `CC 71`: cube morph
-- `CC 72`: white flash/strobe
-- `CC 73`: chroma tolerance
-- `CC 75`: chroma softness
-- `CC 78`: spare
-- `Note 60`: reset effects
-
-If no MIDI device is present, nMosh still runs and shows the NDI stream with baseline GPU processing.
+NDI is a trademark of Vizrt NDI AB. This project is independent and is not
+affiliated with or endorsed by Vizrt NDI AB.

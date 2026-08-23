@@ -1,2 +1,13 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Normalize text while keeping binary application assets untouched.
+* text=auto eol=lf
+
+*.rs text eol=lf
+*.wgsl text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+Cargo.lock text eol=lf
+
+*.bin binary
+*.ico binary
+*.png binary

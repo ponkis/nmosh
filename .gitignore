@@ -1,6 +1,7 @@
 # Rust / Cargo
 /target/
 Cargo.lock.log
+*.log
 
 # Backups
 **/*.rs.bk
