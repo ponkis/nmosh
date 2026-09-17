@@ -134,7 +134,5 @@ privately as described in [SECURITY.md](SECURITY.md).
 
 nMosh is available under the [MIT License](LICENSE).
 
-Created by [ponkis](https://github.com/ponkis) · [ponkis.xyz](https://ponkis.xyz)
-
 NDI is a trademark of Vizrt NDI AB. This project is independent and is not
 affiliated with or endorsed by Vizrt NDI AB.
